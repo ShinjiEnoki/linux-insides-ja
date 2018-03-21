@@ -2,20 +2,31 @@ Timers and time management in the Linux kernel. Part 1.
 ================================================================================
 
 Introduction
+導入
 --------------------------------------------------------------------------------
 
 This is yet another post that opens a new chapter in the [linux-insides](http://0xax.gitbooks.io/linux-insides/content/) book. The previous [part](https://0xax.gitbooks.io/linux-insides/content/SysCall/syscall-4.html) described [system call](https://en.wikipedia.org/wiki/System_call) concepts, and now it's time to start new chapter. As one might understand from the title, this chapter will be devoted to the `timers` and `time management` in the Linux kernel. The choice of topic for the current chapter is not accidental. Timers (and generally, time management) are very important and widely used in the Linux kernel. The Linux kernel uses timers for various tasks, for example different timeouts in the [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol) implementation, the kernel knowing current time, scheduling asynchronous functions, next event interrupt scheduling and many many more.
 
+これは、 [linux-insides](http://0xax.gitbooks.io/linux-insides/content/) 本の新しい章に関するもう一つの投稿です。前の [part](https://0xax.gitbooks.io/linux-insides/content/SysCall/syscall-4.html) は [system call](https://en.wikipedia.org/wiki/System_call) の概念を説明しましたので、新しい章を始めましょう。タイトルからわかるように、この章はタイマーとタイムマネジメントに焦点をあてます。このトピックの選択、附帯的なものではありません。タイマー（一般的にはタイムマネジメント）はとても重要で、カーネル内で広く使われています。カーネルはタイマーを様々なタスク、例えば [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol) 実装の異なるタイムアウト、カーネル自身の現在時刻の把握、非同期処理のスケジューリング、イベント割り込みのスケジューリングなど、もっと様々なものに利用しています。
+
 So, we will start to learn implementation of the different time management related stuff in this part. We will see different types of timers and how different Linux kernel subsystems use them. As always, we will start from the earliest part of the Linux kernel and go through the initialization process of the Linux kernel. We already did it in the special [chapter](https://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) which describes the initialization process of the Linux kernel, but as you may remember we missed some things there. And one of them is the initialization of timers.
+
+そのため、タイムマネジメントをこれらに関連付ける実装の違いを知るところから始めましょう。異なるタイプのタイマーと、カーネルサブシステムがそれらを使う方法についてわかるでしょう。通例どおり、カーネルの最も古い部分から始めましょう。そして、カーネルの初期設定プロセスへと進みます。初期設定については [chapter](https://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) で見てきました、覚えていらっしゃるかもしれませんが、＊＊＊＊＊＊＊。その中の一つが、タイマーの初期設定です。
 
 Let's start.
 
-Initialization of non-standard PC hardware clock
+それでは始めましょう。
+
+非標準PCハードウエアクロックの初期化
 --------------------------------------------------------------------------------
 
 After the Linux kernel was decompressed (more about this you can read in the [Kernel decompression](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-5.html) part) the architecture non-specific code starts to work in the [init/main.c](https://github.com/torvalds/linux/blob/16f73eb02d7e1765ccab3d2018e0bd98eb93d973/init/main.c) source code file. After initialization of the [lock validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt), initialization of [cgroups](https://en.wikipedia.org/wiki/Cgroups) and setting [canary](https://en.wikipedia.org/wiki/Buffer_overflow_protection) value we can see the call of the `setup_arch` function.
 
+カーネルが展開（もっと知りたい方は  [Kernel decompression](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-5.html) に紹介されています）されたあと、[init/main.c](https://github.com/torvalds/linux/blob/16f73eb02d7e1765ccab3d2018e0bd98eb93d973/init/main.c) ファイルでアーキテクチャ非特異性コードが動き始めます？？？？？？？？。[lock validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt) の初期設定、 [cgroups](https://en.wikipedia.org/wiki/Cgroups) の初期設定、 [canary](https://en.wikipedia.org/wiki/Buffer_overflow_protection) value セッティングののち、 `setup_arch` の呼び出しを確認することができます。
+
 As you may remember, this function (defined in the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/16f73eb02d7e1765ccab3d2018e0bd98eb93d973/arch/x86/kernel/setup.c#L842)) prepares/initializes architecture-specific stuff (for example it reserves a place for [bss](https://en.wikipedia.org/wiki/.bss) section, reserves a place for [initrd](https://en.wikipedia.org/wiki/Initrd), parses kernel command line, and many, many other things). Besides this, we can find some time management related functions there.
+
+
 
 The first is:
 
